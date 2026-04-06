@@ -1,15 +1,15 @@
 import type { NextConfig } from "next";
 
+const isProd = process.env.NODE_ENV === "production";
+
 const nextConfig: NextConfig = {
-  output: 'export', 
+  output: "export",
+  basePath: isProd ? "/line-dance-studio" : "",
+  assetPrefix: isProd ? "/line-dance-studio/" : "",
   images: {
-    unoptimized: true, 
+    unoptimized: true,
   },
-  transpilePackages: [
-    "@tensorflow/tfjs-core",
-    "@tensorflow/tfjs-backend-webgl",
-    "@tensorflow/models/pose-detection",
-  ],
+  trailingSlash: true,
 };
 
 export default nextConfig;
