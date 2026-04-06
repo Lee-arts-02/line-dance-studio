@@ -1,20 +1,24 @@
 import type { NextConfig } from "next";
 
-/**
- * GitHub Pages (project site): deploy the `out/` folder to the `line-dance-studio` repo.
- * `next dev` runs with NODE_ENV=development (no base path). `next build` uses production
- * paths so assets resolve under /line-dance-studio/.
- */
-const isProduction = process.env.NODE_ENV === "production";
+// 这里的仓库名必须和你 GitHub 上的名字完全一致
+const repo = 'line-dance-studio';
 
 const nextConfig: NextConfig = {
-  output: "export",
+  output: 'export', // 必须：生成静态网页
+  
+  // 解决 404 和资源加载错误的关键
+  basePath: `/${repo}`, 
+  
   images: {
-    unoptimized: true,
+    unoptimized: true, // 必须：GitHub Pages 不支持 Next.js 默认图片优化
   },
-  trailingSlash: true,
-  basePath: isProduction ? "/line-dance-studio" : "",
-  assetPrefix: isProduction ? "/line-dance-studio/" : "",
+  
+  // 保留你之前的 TensorFlow 配置
+  transpilePackages: [
+    "@tensorflow/tfjs-core",
+    "@tensorflow/tfjs-backend-webgl",
+    "@tensorflow/models/pose-detection",
+  ],
 };
 
 export default nextConfig;
