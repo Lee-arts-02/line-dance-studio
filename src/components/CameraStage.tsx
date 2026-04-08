@@ -21,12 +21,21 @@ import type {
   GroupSyncIntervalReport,
   PlayerActionEvent,
 } from "@/lib/game/types";
+import { PerformanceSummaryOverlay } from "@/components/PerformanceSummaryOverlay";
 import { RewardOverlays } from "@/components/RewardOverlays";
+import { usePerformanceMetrics } from "@/hooks/usePerformanceMetrics";
 import {
   createMoveNetMultiPoseDetector,
   estimatePosesFromVideo,
 } from "@/lib/pose/detector";
 import { COCO17_EDGES, playerHue, shouldDrawEdge } from "@/lib/pose/skeleton";
+import {
+  buildMainStageTorsoLines,
+  drawTorsoActionLabels,
+  TORSO_ACTION_LABEL_LINE_GAP_PX,
+  type CustomBodyPrediction,
+} from "@/lib/pose/bodyActionLabels";
+import { mapVideoToMirroredOverlay } from "@/lib/pose/mirroredVideoMap";
 import {
   ActionRecognitionEngine,
   formatActionLabel,
@@ -92,38 +101,6 @@ type GroupSyncPanelState = {
   currentExpectedLabel: string;
 };
 
-function mapVideoToDisplay(
-  x: number,
-  y: number,
-  vw: number,
-  vh: number,
-  cw: number,
-  ch: number
-): { x: number; y: number } {
-  const scale = Math.max(cw / vw, ch / vh);
-  const w = vw * scale;
-  const h = vh * scale;
-  const ox = (cw - w) / 2;
-  const oy = (ch - h) / 2;
-  return { x: x * scale + ox, y: y * scale + oy };
-}
-
-/**
- * Map keypoint to overlay pixels aligned with a **CSS-mirrored** video (scale-x-[-1] on video only).
- * The canvas is **not** mirrored, so we flip X here; skeleton matches the mirror while text draws unmirrored.
- */
-function mapVideoToMirroredOverlay(
-  x: number,
-  y: number,
-  vw: number,
-  vh: number,
-  cw: number,
-  ch: number
-): { x: number; y: number } {
-  const p = mapVideoToDisplay(x, y, vw, vh, cw, ch);
-  return { x: cw - p.x, y: p.y };
-}
-
 function judgmentFillForTier(tier: JudgmentCanvasOverlay["tier"]): string {
   switch (tier) {
     case "perfect":
@@ -139,6 +116,7 @@ function drawTrackedPoses(
   ctx: CanvasRenderingContext2D,
   people: TrackedPerson[],
   ephemeral: EphemeralActionDisplay[],
+  customBody: CustomBodyPrediction | null,
   judgmentOverlays: JudgmentCanvasOverlay[],
   vw: number,
   vh: number,
@@ -182,6 +160,12 @@ function drawTrackedPoses(
     });
 
     const t = mapVideoToMirroredOverlay(person.torso.x, person.torso.y, vw, vh, cw, ch);
+    const snap = ephemeral.find((s) => s.playerId === person.playerId);
+    const torsoLines = buildMainStageTorsoLines(snap, customBody, person.playerId);
+    /** Extra action lines stack upward — nudge player / judgment labels to avoid overlap. */
+    const stackLift =
+      Math.max(0, torsoLines.length - 1) * TORSO_ACTION_LABEL_LINE_GAP_PX;
+
     ctx.textAlign = "center";
     ctx.textBaseline = "bottom";
     ctx.lineWidth = 4;
@@ -189,8 +173,8 @@ function drawTrackedPoses(
     ctx.fillStyle = stroke;
     ctx.font = "bold 14px system-ui, sans-serif";
     const label = `Player ${person.playerId}`;
-    ctx.strokeText(label, t.x, t.y - 28);
-    ctx.fillText(label, t.x, t.y - 28);
+    ctx.strokeText(label, t.x, t.y - 28 - stackLift);
+    ctx.fillText(label, t.x, t.y - 28 - stackLift);
 
     const j = judgmentOverlays.find((o) => o.playerId === person.playerId);
     if (j) {
@@ -203,19 +187,11 @@ function drawTrackedPoses(
       ctx.lineWidth = j.tier === "perfect" ? 4 : 3;
       ctx.fillStyle = judgmentFillForTier(j.tier);
       ctx.strokeStyle = "rgba(0,0,0,0.72)";
-      ctx.strokeText(j.text, t.x, t.y - 46);
-      ctx.fillText(j.text, t.x, t.y - 46);
+      ctx.strokeText(j.text, t.x, t.y - 46 - stackLift);
+      ctx.fillText(j.text, t.x, t.y - 46 - stackLift);
     }
 
-    const snap = ephemeral.find((s) => s.playerId === person.playerId);
-    if (snap?.action) {
-      ctx.fillStyle = stroke;
-      const actionText = `${formatActionLabel(snap.action)}`;
-      ctx.font = "600 12px system-ui, sans-serif";
-      ctx.lineWidth = 3;
-      ctx.strokeText(actionText, t.x, t.y - 10);
-      ctx.fillText(actionText, t.x, t.y - 10);
-    }
+    drawTorsoActionLabels(ctx, t.x, t.y, torsoLines, stroke);
   }
 }
 
@@ -344,6 +320,15 @@ export function CameraStage({
     currentBlockIndex: 0,
     currentExpectedLabel: "—",
   });
+
+  const { cycle: perfSummaryCycle, ingestIntervalReport, dismissCycle } =
+    usePerformanceMetrics(performanceMode);
+  const ingestPerfSummaryRef = useRef(ingestIntervalReport);
+  ingestPerfSummaryRef.current = ingestIntervalReport;
+
+  useEffect(() => {
+    if (!performanceMode) dismissCycle();
+  }, [performanceMode, dismissCycle]);
   const pushDebug = useCallback((partial: Partial<PoseDebugSnapshot>) => {
     const now = performance.now();
     if (now - lastDebugPush.current < 220) return;
@@ -458,6 +443,8 @@ export function CameraStage({
               const buf = liveFramesRef.current;
               const poseOkForCustom = primary != null && isPoseStableEnough(primary);
               let customInferenceRan = false;
+              /** Same-frame softmax for on-body label (primary player only). */
+              let customBodyForCanvas: CustomBodyPrediction | null = null;
 
               if (!mdl || !meta) {
                 buf.length = 0;
@@ -507,6 +494,11 @@ export function CameraStage({
                       meta.inputFrames
                     );
                     customInferenceRan = true;
+                    customBodyForCanvas = {
+                      playerId: primary.playerId,
+                      label: pred.label,
+                      confidence: pred.confidence,
+                    };
                     if (frameTime - lastCustomUiPush.current >= 200) {
                       lastCustomUiPush.current = frameTime;
                       setDebug((d) => ({
@@ -577,6 +569,7 @@ export function CameraStage({
                 if (tickOut.intervalReports.length > 0) {
                   const latestReport = tickOut.intervalReports[tickOut.intervalReports.length - 1]!;
                   setGroupSyncPanel((p) => ({ ...p, lastIntervalReport: latestReport }));
+                  ingestPerfSummaryRef.current(latestReport);
                   for (const report of tickOut.intervalReports) {
                     onGroupStatsIntervalRef.current?.(report);
                   }
@@ -639,6 +632,7 @@ export function CameraStage({
                 ctx,
                 tracked,
                 actionEphemeral,
+                customBodyForCanvas,
                 judgmentOverlays,
                 vw,
                 vh,
@@ -740,6 +734,13 @@ export function CameraStage({
           aria-hidden
         />
         <RewardOverlays reward={rewardVisual} confettiBurstKey={confettiBurstKey} />
+        {performanceMode && perfSummaryCycle ? (
+          <PerformanceSummaryOverlay
+            key={perfSummaryCycle.key}
+            stats={perfSummaryCycle.stats}
+            onDismiss={dismissCycle}
+          />
+        ) : null}
         {debug.status === "loading" ? (
           <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/55 text-sm text-white">
             Loading pose model…

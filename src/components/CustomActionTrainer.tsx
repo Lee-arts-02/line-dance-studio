@@ -32,6 +32,11 @@ import {
 } from "@/lib/ml/training";
 import type { CustomSequenceSample, PoseFrameRecord } from "@/lib/ml/types";
 import { CUSTOM_IDLE_LABEL } from "@/lib/ml/types";
+import {
+  buildTrainerTorsoLines,
+  drawTorsoActionLabels,
+} from "@/lib/pose/bodyActionLabels";
+import { mapVideoToMirroredOverlay } from "@/lib/pose/mirroredVideoMap";
 import { COCO17_EDGES, playerHue, shouldDrawEdge } from "@/lib/pose/skeleton";
 import { TorsoProximityTracker } from "@/lib/pose/tracker";
 import { KEYPOINT_CONFIDENCE_THRESHOLD, type StablePlayerId } from "@/lib/pose/types";
@@ -52,34 +57,6 @@ function newSampleId(): string {
     return crypto.randomUUID();
   }
   return `s_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
-}
-
-function mapVideoToDisplay(
-  x: number,
-  y: number,
-  vw: number,
-  vh: number,
-  cw: number,
-  ch: number
-): { x: number; y: number } {
-  const scale = Math.max(cw / vw, ch / vh);
-  const w = vw * scale;
-  const h = vh * scale;
-  const ox = (cw - w) / 2;
-  const oy = (ch - h) / 2;
-  return { x: x * scale + ox, y: y * scale + oy };
-}
-
-function mapVideoToMirroredOverlay(
-  x: number,
-  y: number,
-  vw: number,
-  vh: number,
-  cw: number,
-  ch: number
-): { x: number; y: number } {
-  const p = mapVideoToDisplay(x, y, vw, vh, cw, ch);
-  return { x: cw - p.x, y: p.y };
 }
 
 function drawSinglePerson(
@@ -454,6 +431,9 @@ export function CustomActionTrainer() {
             if (!det || !v || !c) return;
 
             if (v.readyState >= 2) {
+              /** Canvas overlay: same-frame custom softmax (sidebar state may lag one frame). */
+              let liveCustomPred: { label: string; confidence: number } | null = null;
+
               const cw = c.clientWidth;
               const ch = c.clientHeight;
               const dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -547,6 +527,7 @@ export function CustomActionTrainer() {
                   const meta = inferMetaRef.current;
                   if (m && meta && buf.length >= DEFAULT_SEQUENCE_FRAMES) {
                     const pred = predictCustomSequence(m, meta.classNames, buf, meta.inputFrames);
+                    liveCustomPred = { label: pred.label, confidence: pred.confidence };
                     setCustomPred({ label: pred.label, confidence: pred.confidence });
                   }
                 }
@@ -576,6 +557,33 @@ export function CustomActionTrainer() {
                   KEYPOINT_CONFIDENCE_THRESHOLD,
                   0.15
                 );
+                const stroke = playerHue(drawTarget.playerId);
+                const torsoPx = mapVideoToMirroredOverlay(
+                  drawTarget.torso.x,
+                  drawTarget.torso.y,
+                  vw,
+                  vh,
+                  cw,
+                  ch
+                );
+                const ephem = actionEngine.getEphemeralForCanvas(frameTime, [drawTarget.playerId]);
+                const builtinFlash = ephem[0]?.action ?? null;
+                const recordingLabelNorm =
+                  phaseRef.current === "recording"
+                    ? normalizeLabel(lockedLabelRef.current)
+                    : null;
+                const countdownTargetNorm =
+                  phaseRef.current === "countdown"
+                    ? normalizeLabel(lockedLabelRef.current)
+                    : null;
+                const trainerLines = buildTrainerTorsoLines({
+                  builtinAction: builtinFlash,
+                  custom: liveCustomPred,
+                  phase: phaseRef.current,
+                  recordingLabel: recordingLabelNorm,
+                  countdownTargetLabel: countdownTargetNorm,
+                });
+                drawTorsoActionLabels(ctx, torsoPx.x, torsoPx.y, trainerLines, stroke);
               }
               ctx.restore();
 
