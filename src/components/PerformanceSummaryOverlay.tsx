@@ -3,9 +3,9 @@
 import { useEffect, useState } from "react";
 import type { PerformanceSummaryStats } from "@/lib/game/performanceSummary";
 
-const FADE_IN_MS = 300;
-const HOLD_MS = 2500;
-const FADE_OUT_MS = 400;
+const FADE_IN_MS = 380;
+const HOLD_MS = 2800;
+const FADE_OUT_MS = 480;
 
 type Phase = "enter" | "visible" | "exit";
 
@@ -14,9 +14,21 @@ type PerformanceSummaryOverlayProps = {
   onDismiss: () => void;
 };
 
+function flowLabel(level: PerformanceSummaryStats["flowLevel"]): string {
+  switch (level) {
+    case "MAX":
+      return "MAX";
+    case "HIGH":
+      return "HIGH";
+    case "MID":
+      return "MID";
+    default:
+      return "LOW";
+  }
+}
+
 /**
- * Performance summary on the camera stack (not mirrored). Slogan is prominent in the upper third;
- * metrics stay readable below. pointer-events: none.
+ * 20s interval — centered “stage” card: large headline + metrics. High z-index above camera / flow bar.
  */
 export function PerformanceSummaryOverlay({ stats, onDismiss }: PerformanceSummaryOverlayProps) {
   const [phase, setPhase] = useState<Phase>("enter");
@@ -39,41 +51,71 @@ export function PerformanceSummaryOverlay({ stats, onDismiss }: PerformanceSumma
   }, [onDismiss]);
 
   const opacity = phase === "visible" ? "opacity-100" : "opacity-0";
-  const duration = phase === "exit" ? "duration-[400ms]" : "duration-300";
+  const duration = phase === "exit" ? "duration-[480ms]" : "duration-300";
+  const scale =
+    phase === "visible" ? "scale-100" : phase === "enter" ? "scale-[0.88]" : "scale-[0.94]";
+
+  const glowActive = phase === "visible";
 
   return (
     <div
-      className={`pointer-events-none absolute inset-x-0 top-[31%] z-[30] flex -translate-y-1/2 justify-center px-4 transition-opacity ease-out ${opacity} ${duration}`}
+      className="pointer-events-none absolute inset-0 z-[40] flex items-center justify-center px-3 py-8 sm:px-6"
       role="status"
       aria-live="polite"
     >
-      <div className="max-w-2xl rounded-2xl border border-white/15 bg-black/25 px-6 py-5 text-center shadow-lg backdrop-blur-sm sm:px-8 sm:py-6">
-        <p
-          className="text-4xl font-bold leading-tight tracking-tight text-white sm:text-5xl"
-          style={{
-            textShadow:
-              "0 1px 2px rgba(0,0,0,0.9), 0 2px 16px rgba(0,0,0,0.55), 0 0 1px rgba(0,0,0,1)",
-          }}
-        >
-          {stats.message}
-        </p>
+      <div
+        className={`w-full max-w-2xl transition-all ease-out ${opacity} ${duration} ${scale}`}
+      >
+        <div className="relative overflow-hidden rounded-3xl border-2 border-fuchsia-400/45 bg-gradient-to-b from-black/75 via-black/65 to-black/80 px-5 py-7 shadow-[0_0_48px_rgba(217,70,239,0.22),0_0_96px_rgba(34,211,238,0.08)] backdrop-blur-xl sm:px-10 sm:py-9">
+          <div
+            className="pointer-events-none absolute inset-0 opacity-40"
+            style={{
+              background:
+                "radial-gradient(ellipse 80% 50% at 50% 0%, rgba(217,70,239,0.35), transparent 55%)",
+            }}
+          />
 
-        <div className="mt-4 text-[10px] font-semibold uppercase tracking-[0.22em] text-white/50 sm:text-[11px]">
-          60s group performance
-        </div>
+          <p
+            className={`relative text-center text-4xl font-black uppercase leading-[1.05] tracking-tight text-white sm:text-5xl md:text-6xl ${
+              glowActive ? "[animation:perf-summary-hero-glow_2.2s_ease-in-out_infinite]" : ""
+            }`}
+            style={{
+              textShadow:
+                "0 2px 4px rgba(0,0,0,1), 0 0 40px rgba(251,191,36,0.45), 0 0 80px rgba(34,211,238,0.2)",
+            }}
+          >
+            {stats.headline}
+          </p>
 
-        <div className="mt-3 flex flex-wrap items-baseline justify-center gap-x-8 gap-y-2 border-t border-white/10 pt-3 font-mono text-sm text-white/95 sm:text-base">
-          <div>
-            <span className="text-white/55">Group Accuracy</span>{" "}
-            <span className="text-xl font-bold tabular-nums text-fuchsia-200 sm:text-2xl [text-shadow:0_1px_3px_rgba(0,0,0,0.85)]">
-              {stats.accuracyPct}%
-            </span>
+          <div className="relative mt-5 text-center text-[10px] font-bold uppercase tracking-[0.35em] text-white/50 sm:text-[11px]">
+            20s set
           </div>
-          <div>
-            <span className="text-white/55">Group Sync</span>{" "}
-            <span className="text-xl font-bold tabular-nums text-cyan-200 sm:text-2xl [text-shadow:0_1px_3px_rgba(0,0,0,0.85)]">
-              {stats.syncPct}%
-            </span>
+
+          <div className="relative mt-5 flex flex-wrap items-end justify-center gap-x-10 gap-y-4 border-t border-white/15 pt-5 font-mono text-white/95">
+            <div className="text-center">
+              <span className="block text-[9px] font-semibold uppercase tracking-widest text-fuchsia-300/80">
+                Peak sync
+              </span>
+              <span className="text-2xl font-black tabular-nums text-fuchsia-200 sm:text-3xl [text-shadow:0_2px_10px_rgba(0,0,0,0.9)]">
+                ×{stats.peakSyncCombo}
+              </span>
+            </div>
+            <div className="text-center">
+              <span className="block text-[9px] font-semibold uppercase tracking-widest text-cyan-300/80">
+                Peak correct
+              </span>
+              <span className="text-2xl font-black tabular-nums text-cyan-200 sm:text-3xl [text-shadow:0_2px_10px_rgba(0,0,0,0.9)]">
+                ×{stats.peakCorrectCombo}
+              </span>
+            </div>
+            <div className="text-center">
+              <span className="block text-[9px] font-semibold uppercase tracking-widest text-amber-300/80">
+                Team flow
+              </span>
+              <span className="text-2xl font-black tabular-nums text-amber-200 sm:text-3xl [text-shadow:0_2px_10px_rgba(0,0,0,0.9)]">
+                {flowLabel(stats.flowLevel)}
+              </span>
+            </div>
           </div>
         </div>
       </div>

@@ -24,3 +24,101 @@ body {
     opacity: 0.35;
   }
 }
+
+/** Performance mode — combo number bump (DDR-style). */
+@keyframes perf-combo-pulse {
+  0% {
+    transform: scale(1);
+  }
+  45% {
+    transform: scale(1.2);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+/** Team flow bar — subtle beat-linked pulse (duration set inline from BPM). */
+@keyframes perf-flow-glow-pulse {
+  0%,
+  100% {
+    filter: brightness(1);
+    box-shadow: 0 0 12px rgba(34, 211, 238, 0.25);
+  }
+  50% {
+    filter: brightness(1.08);
+    box-shadow: 0 0 22px rgba(34, 211, 238, 0.45);
+  }
+}
+
+@keyframes perf-micro-pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.92);
+  }
+  12% {
+    opacity: 1;
+    transform: scale(1.04);
+  }
+  35% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  78% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: scale(0.99);
+  }
+}
+
+/** Under-combo DDR micro: scale punch + lift + glow (GPU-friendly transforms). */
+@keyframes perf-micro-ddr {
+  0% {
+    opacity: 0;
+    transform: translateY(10px) scale(0.9);
+    filter: drop-shadow(0 0 0 transparent);
+  }
+  20% {
+    opacity: 1;
+    transform: translateY(-10px) scale(1.2);
+    filter: drop-shadow(0 0 14px rgba(34, 211, 238, 0.6));
+  }
+  42% {
+    opacity: 1;
+    transform: translateY(-5px) scale(1.06);
+    filter: drop-shadow(0 0 18px rgba(250, 204, 21, 0.4));
+  }
+  65% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    filter: drop-shadow(0 0 12px rgba(34, 211, 238, 0.45));
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.97);
+    filter: drop-shadow(0 0 6px rgba(0, 0, 0, 0.55));
+  }
+}
+
+@keyframes perf-screen-flash {
+  0% {
+    opacity: 0.35;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+/** 20s summary headline — subtle glow pulse (center overlay, lightweight). */
+@keyframes perf-summary-hero-glow {
+  0%,
+  100% {
+    filter: drop-shadow(0 0 14px rgba(250, 204, 21, 0.35));
+  }
+  50% {
+    filter: drop-shadow(0 0 28px rgba(34, 211, 238, 0.5))
+      drop-shadow(0 0 40px rgba(217, 70, 239, 0.25));
+  }
+}

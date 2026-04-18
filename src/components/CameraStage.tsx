@@ -21,7 +21,10 @@ import type {
   GroupSyncIntervalReport,
   PlayerActionEvent,
 } from "@/lib/game/types";
+import { ComboDisplay } from "@/components/ComboDisplay";
+import { PerformanceScreenFlash } from "@/components/PerformanceScreenFlash";
 import { PerformanceSummaryOverlay } from "@/components/PerformanceSummaryOverlay";
+import { TeamFlowBar } from "@/components/TeamFlowBar";
 import { RewardOverlays } from "@/components/RewardOverlays";
 import { usePerformanceMetrics } from "@/hooks/usePerformanceMetrics";
 import {
@@ -234,12 +237,14 @@ export type CameraStageProps = {
   performanceMode?: boolean;
   /** Fires once per finalized group-sync beat (same as Step 6 tracker). */
   onGroupSyncFinalized?: (result: GroupSyncBeatResult) => void;
-  /** Fires when the rolling stats interval closes (default 60s in tracker). */
+  /** Fires when the rolling stats interval closes (default 20s in tracker). */
   onGroupStatsInterval?: (report: GroupSyncIntervalReport) => void;
   rewardVisual?: RewardVisualState;
   confettiBurstKey?: number;
   /** Active choreography (action + rest beats); must match HUD / timeline. */
   choreographySequence: readonly BeatSlot[];
+  /** Live BPM for team-flow pulse timing in performance mode. */
+  performanceBpm?: number;
 };
 
 /**
@@ -253,6 +258,7 @@ export function CameraStage({
   rewardVisual = createNeutralRewardState(),
   confettiBurstKey = 0,
   choreographySequence,
+  performanceBpm,
 }: CameraStageProps) {
   const onGroupSyncRef = useRef(onGroupSyncFinalized);
   onGroupSyncRef.current = onGroupSyncFinalized;
@@ -321,14 +327,12 @@ export function CameraStage({
     currentExpectedLabel: "—",
   });
 
-  const { cycle: perfSummaryCycle, ingestIntervalReport, dismissCycle } =
+  const { cycle: perfSummaryCycle, gameHud, ingestBlockResult, ingestIntervalReport, dismissCycle } =
     usePerformanceMetrics(performanceMode);
   const ingestPerfSummaryRef = useRef(ingestIntervalReport);
   ingestPerfSummaryRef.current = ingestIntervalReport;
-
-  useEffect(() => {
-    if (!performanceMode) dismissCycle();
-  }, [performanceMode, dismissCycle]);
+  const ingestBlockRef = useRef(ingestBlockResult);
+  ingestBlockRef.current = ingestBlockResult;
   const pushDebug = useCallback((partial: Partial<PoseDebugSnapshot>) => {
     const now = performance.now();
     if (now - lastDebugPush.current < 220) return;
@@ -565,6 +569,7 @@ export function CameraStage({
                 if (tickOut.latestBlockResult) {
                   setGroupSyncPanel((p) => ({ ...p, lastResult: tickOut.latestBlockResult }));
                   onGroupSyncRef.current?.(tickOut.latestBlockResult);
+                  ingestBlockRef.current(tickOut.latestBlockResult);
                 }
                 if (tickOut.intervalReports.length > 0) {
                   const latestReport = tickOut.intervalReports[tickOut.intervalReports.length - 1]!;
@@ -733,7 +738,24 @@ export function CameraStage({
           className="pointer-events-none absolute inset-0 h-full w-full"
           aria-hidden
         />
-        <RewardOverlays reward={rewardVisual} confettiBurstKey={confettiBurstKey} />
+        <RewardOverlays
+          reward={rewardVisual}
+          confettiBurstKey={confettiBurstKey}
+          performanceConfettiKey={performanceMode ? gameHud.flowConfettiKey : 0}
+        />
+        {performanceMode ? (
+          <>
+            <ComboDisplay
+              syncCombo={gameHud.syncCombo}
+              correctCombo={gameHud.correctCombo}
+              syncPulseTick={gameHud.syncPulseTick}
+              correctPulseTick={gameHud.correctPulseTick}
+              micro={gameHud.micro}
+            />
+            <TeamFlowBar teamFlow={gameHud.teamFlow} bpm={performanceBpm} />
+            <PerformanceScreenFlash flashKey={gameHud.flowScreenFlashKey} />
+          </>
+        ) : null}
         {performanceMode && perfSummaryCycle ? (
           <PerformanceSummaryOverlay
             key={perfSummaryCycle.key}

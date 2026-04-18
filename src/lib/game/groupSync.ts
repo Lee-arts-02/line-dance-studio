@@ -17,7 +17,8 @@ import type {
 } from "./types";
 
 export const GROUP_SYNC_SPREAD_MAX_MS = 300;
-export const STATS_INTERVAL_MS = 60_000;
+/** Performance summary / interval aggregation window (group accuracy + sync over full window). */
+export const STATS_INTERVAL_MS = 20_000;
 
 /**
  * Finalize pair `P` after its window ends: when beat float passes the end of the rest beat + offset.

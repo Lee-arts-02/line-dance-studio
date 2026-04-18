@@ -7,6 +7,8 @@ type RewardOverlaysProps = {
   reward: RewardVisualState;
   /** Bump to replay confetti burst */
   confettiBurstKey: number;
+  /** Optional: team-flow max / performance burst (independent of reward tier). */
+  performanceConfettiKey?: number;
 };
 
 /** Lightweight CSS confetti — small divs, no canvas, pointer-events none */
@@ -49,9 +51,14 @@ function ConfettiBurst({ burstKey }: { burstKey: number }) {
 /**
  * Stage-level reward FX: rim glow, optional confetti, optional banner (group sync).
  */
-export function RewardOverlays({ reward, confettiBurstKey }: RewardOverlaysProps) {
+export function RewardOverlays({
+  reward,
+  confettiBurstKey,
+  performanceConfettiKey = 0,
+}: RewardOverlaysProps) {
   const showGlow = reward.tier === "glow" || reward.tier === "confetti";
   const showConfetti = reward.tier === "confetti";
+  const showPerfConfetti = performanceConfettiKey > 0;
 
   return (
     <>
@@ -62,6 +69,14 @@ export function RewardOverlays({ reward, confettiBurstKey }: RewardOverlaysProps
         />
       ) : null}
       {showConfetti ? <ConfettiBurst burstKey={confettiBurstKey} /> : null}
+      {showPerfConfetti ? (
+        <div
+          className="pointer-events-none absolute inset-0 z-[27] overflow-hidden [contain:paint]"
+          aria-hidden
+        >
+          <ConfettiBurst burstKey={performanceConfettiKey} />
+        </div>
+      ) : null}
       {reward.banner ? (
         <div className="pointer-events-none absolute bottom-4 left-1/2 z-[26] max-w-[90%] -translate-x-1/2 text-center">
           <div className="rounded-full border border-white/20 bg-black/45 px-5 py-2 text-sm font-bold uppercase tracking-[0.2em] text-emerald-100 shadow-lg backdrop-blur-sm sm:text-base">

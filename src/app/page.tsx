@@ -86,6 +86,9 @@ export default function Home() {
     bpmRef.current = bpm;
   }, [bpm]);
 
+  const performanceModeRef = useRef(performanceMode);
+  performanceModeRef.current = performanceMode;
+
   const loadBuiltIn = useCallback((id: string) => {
     const engine = engineRef.current;
     if (!engine) return;
@@ -190,6 +193,9 @@ export default function Home() {
         setConfettiBurstKey((k) => k + 1);
       }
     }
+
+    /** Performance Mode: fixed BPM — no streak-based speed-up / slow-down during playback. */
+    if (performanceModeRef.current) return;
 
     const bc = bpmProgressionRef.current;
     const engine = engineRef.current;
@@ -326,16 +332,16 @@ export default function Home() {
             rewardVisual={rewardVisual}
             confettiBurstKey={confettiBurstKey}
             choreographySequence={beatSequence}
+            performanceBpm={performanceMode ? hudTick.bpm : undefined}
           />
         </div>
       </div>
       {!performanceMode && latestGroupStatsReport ? (
         <section className="rounded-xl border border-[var(--border)] bg-[var(--panel)]/50 px-4 py-3 text-xs text-[var(--muted)]">
-          <div className="font-semibold uppercase tracking-wide">Latest 60s group report</div>
+          <div className="font-semibold uppercase tracking-wide">Latest 20s group report</div>
           <div className="mt-1 font-mono">
-            sync {Math.round(latestGroupStatsReport.overallGroupSync * 100)}% · accuracy{" "}
-            {Math.round(latestGroupStatsReport.overallGroupAccuracy * 100)}% · blocks{" "}
-            {latestGroupStatsReport.evaluatedBlockCount}
+            last window · blocks {latestGroupStatsReport.evaluatedBlockCount} ·{" "}
+            {Math.round(latestGroupStatsReport.intervalMs / 1000)}s
           </div>
         </section>
       ) : null}
