@@ -26,7 +26,7 @@ import { PerformanceScreenFlash } from "@/components/PerformanceScreenFlash";
 import { PerformanceSummaryOverlay } from "@/components/PerformanceSummaryOverlay";
 import { TeamFlowBar } from "@/components/TeamFlowBar";
 import { RewardOverlays } from "@/components/RewardOverlays";
-import { usePerformanceMetrics } from "@/hooks/usePerformanceMetrics";
+import type { CameraStagePerformanceMetrics } from "@/hooks/usePerformanceMetrics";
 import {
   createMoveNetMultiPoseDetector,
   estimatePosesFromVideo,
@@ -245,6 +245,10 @@ export type CameraStageProps = {
   choreographySequence: readonly BeatSlot[];
   /** Live BPM for team-flow pulse timing in performance mode. */
   performanceBpm?: number;
+  /** Cumulative session HUD + ingest (owned by parent with PLAY / END). */
+  performanceMetrics?: CameraStagePerformanceMetrics | null;
+  /** Increments on each PLAY — resets in-stage scoring / group-sync for a new performance round. */
+  performanceSessionGeneration?: number;
 };
 
 /**
@@ -259,6 +263,8 @@ export function CameraStage({
   confettiBurstKey = 0,
   choreographySequence,
   performanceBpm,
+  performanceMetrics = null,
+  performanceSessionGeneration = 0,
 }: CameraStageProps) {
   const onGroupSyncRef = useRef(onGroupSyncFinalized);
   onGroupSyncRef.current = onGroupSyncFinalized;
@@ -320,6 +326,24 @@ export function CameraStage({
 
   const liveFramesRef = useRef<PoseFrameRecord[]>([]);
   const customEmitterRef = useRef(new CustomGestureEmitter());
+  const lastAppliedPerfGenRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (!performanceMode) {
+      lastAppliedPerfGenRef.current = null;
+      return;
+    }
+    if (performanceSessionGeneration <= 0) return;
+    if (lastAppliedPerfGenRef.current === performanceSessionGeneration) return;
+    lastAppliedPerfGenRef.current = performanceSessionGeneration;
+
+    scoreboardRef.current.reset();
+    groupSyncRef.current.reset();
+    actionEngineRef.current.reset();
+    customEmitterRef.current.reset();
+    liveFramesRef.current.length = 0;
+  }, [performanceMode, performanceSessionGeneration]);
+
   const [groupSyncPanel, setGroupSyncPanel] = useState<GroupSyncPanelState>({
     lastResult: null,
     lastIntervalReport: null,
@@ -327,12 +351,12 @@ export function CameraStage({
     currentExpectedLabel: "—",
   });
 
-  const { cycle: perfSummaryCycle, gameHud, ingestBlockResult, ingestIntervalReport, dismissCycle } =
-    usePerformanceMetrics(performanceMode);
-  const ingestPerfSummaryRef = useRef(ingestIntervalReport);
-  ingestPerfSummaryRef.current = ingestIntervalReport;
-  const ingestBlockRef = useRef(ingestBlockResult);
-  ingestBlockRef.current = ingestBlockResult;
+  const ingestPerfSummaryRef = useRef<(r: GroupSyncIntervalReport) => void>(() => {});
+  const ingestBlockRef = useRef<(r: GroupSyncBeatResult) => void>(() => {});
+  useEffect(() => {
+    ingestPerfSummaryRef.current = performanceMetrics?.ingestIntervalReport ?? (() => {});
+    ingestBlockRef.current = performanceMetrics?.ingestBlockResult ?? (() => {});
+  }, [performanceMetrics?.ingestIntervalReport, performanceMetrics?.ingestBlockResult]);
   const pushDebug = useCallback((partial: Partial<PoseDebugSnapshot>) => {
     const now = performance.now();
     if (now - lastDebugPush.current < 220) return;
@@ -741,26 +765,26 @@ export function CameraStage({
         <RewardOverlays
           reward={rewardVisual}
           confettiBurstKey={confettiBurstKey}
-          performanceConfettiKey={performanceMode ? gameHud.flowConfettiKey : 0}
+          performanceConfettiKey={performanceMode && performanceMetrics ? performanceMetrics.gameHud.flowConfettiKey : 0}
         />
-        {performanceMode ? (
+        {performanceMode && performanceMetrics ? (
           <>
             <ComboDisplay
-              syncCombo={gameHud.syncCombo}
-              correctCombo={gameHud.correctCombo}
-              syncPulseTick={gameHud.syncPulseTick}
-              correctPulseTick={gameHud.correctPulseTick}
-              micro={gameHud.micro}
+              syncCount={performanceMetrics.gameHud.syncCount}
+              correctCount={performanceMetrics.gameHud.correctCount}
+              syncPulseTick={performanceMetrics.gameHud.syncPulseTick}
+              correctPulseTick={performanceMetrics.gameHud.correctPulseTick}
+              micro={performanceMetrics.gameHud.micro}
             />
-            <TeamFlowBar teamFlow={gameHud.teamFlow} bpm={performanceBpm} />
-            <PerformanceScreenFlash flashKey={gameHud.flowScreenFlashKey} />
+            <TeamFlowBar teamFlow={performanceMetrics.gameHud.teamFlow} bpm={performanceBpm} />
+            <PerformanceScreenFlash flashKey={performanceMetrics.gameHud.flowScreenFlashKey} />
           </>
         ) : null}
-        {performanceMode && perfSummaryCycle ? (
+        {performanceMode && performanceMetrics?.cycle ? (
           <PerformanceSummaryOverlay
-            key={perfSummaryCycle.key}
-            stats={perfSummaryCycle.stats}
-            onDismiss={dismissCycle}
+            key={performanceMetrics.cycle.key}
+            stats={performanceMetrics.cycle.stats}
+            onDismiss={performanceMetrics.dismissCycle}
           />
         ) : null}
         {debug.status === "loading" ? (

@@ -82,7 +82,7 @@ export function TeamFlowBar({ teamFlow, bpm }: TeamFlowBarProps) {
         }}
       >
         <div
-          className={`relative z-[1] h-full rounded-full transition-[width] duration-300 ease-out ${v.fill}`}
+          className={`relative z-[1] h-full rounded-full transition-[width] duration-500 ease-out ${v.fill}`}
           style={{ width: `${pct}%` }}
         />
         {v.maxAura ? (

@@ -29,6 +29,10 @@ import {
 } from "@/components/ChoreographyPanel";
 import { MusicPanel } from "@/components/MusicPanel";
 import { PerformanceSequenceHud } from "@/components/PerformanceSequenceHud";
+import { PerformanceControls, type PerformanceSessionPhase } from "@/components/PerformanceControls";
+import { PerformanceResultsPanel } from "@/components/PerformanceResultsPanel";
+import { usePerformanceMetrics } from "@/hooks/usePerformanceMetrics";
+import { playResultSfxForResultsBuild, preloadResultSfx, stopResultSfx } from "@/lib/audio/resultSfx";
 
 export default function Home() {
   const { availableChoreographyIds } = useCustomModel();
@@ -39,6 +43,11 @@ export default function Home() {
 
   const [hydrated, setHydrated] = useState(false);
   const [performanceMode, setPerformanceMode] = useState(false);
+  const [perfSessionPhase, setPerfSessionPhase] = useState<PerformanceSessionPhase>("idle");
+  /** Bumps when a session ends so the results panel runs one synchronized SFX + count-up pass. */
+  const [perfResultPlaybackId, setPerfResultPlaybackId] = useState(0);
+  /** Increments on each PLAY — resets CameraStage score/sync state for a fresh round. */
+  const [perfSessionGeneration, setPerfSessionGeneration] = useState(0);
 
   const [selectedBuiltInId, setSelectedBuiltInId] = useState(BUILT_IN_TRACKS[0].id);
   const [bpm, setBpm] = useState(BUILT_IN_TRACKS[0].bpm);
@@ -59,6 +68,19 @@ export default function Home() {
   ]);
 
   const hudTick = useAudioEngineTick(engineRef);
+
+  const perfSessionActive = performanceMode && perfSessionPhase === "playing";
+  const {
+    gameHud: perfGameHud,
+    cycle: perfSummaryCycle,
+    dismissCycle: dismissPerfSummaryCycle,
+    ingestBlockResult: perfIngestBlock,
+    ingestIntervalReport: perfIngestInterval,
+    beginSession: perfBeginSession,
+    endSession: perfEndSession,
+    sessionResult: perfSessionResult,
+    dismissSessionResults: perfDismissSessionResults,
+  } = usePerformanceMetrics(performanceMode, perfSessionActive);
 
   const beatSequence = useMemo(() => {
     if (choreographyMode === "system") return DEFAULT_BEAT_SEQUENCE;
@@ -85,6 +107,37 @@ export default function Home() {
   useEffect(() => {
     bpmRef.current = bpm;
   }, [bpm]);
+
+  useEffect(() => {
+    if (!performanceMode) setPerfSessionPhase("idle");
+  }, [performanceMode]);
+
+  const handlePerfPlay = useCallback(() => {
+    const engine = engineRef.current;
+    stopResultSfx();
+    preloadResultSfx();
+    engine?.reset();
+    perfBeginSession();
+    setPerfSessionGeneration((g) => g + 1);
+    setPerfSessionPhase("playing");
+    if (engine) void engine.play().catch(() => {});
+  }, [perfBeginSession]);
+
+  const handlePerfEnd = useCallback(() => {
+    const engine = engineRef.current;
+    engine?.pause();
+    perfEndSession();
+    /** Same user gesture as END — reliable `HTMLAudioElement.play()` vs autoplay rules. */
+    playResultSfxForResultsBuild({ maxAudibleMs: 3000 });
+    setPerfSessionPhase("ended");
+    setPerfResultPlaybackId((n) => n + 1);
+  }, [perfEndSession]);
+
+  const handlePerfResultsClose = useCallback(() => {
+    stopResultSfx();
+    perfDismissSessionResults();
+    setPerfSessionPhase("idle");
+  }, [perfDismissSessionResults]);
 
   const performanceModeRef = useRef(performanceMode);
   performanceModeRef.current = performanceMode;
@@ -227,8 +280,9 @@ export default function Home() {
   return (
     <main className={mainClass}>
       {performanceMode ? (
-        <div className="pointer-events-none absolute right-3 top-3 z-50 flex items-center gap-3 text-[10px] text-white/50">
+        <div className="pointer-events-none absolute right-3 top-3 z-50 flex flex-wrap items-center justify-end gap-2 text-[10px] text-white/50 sm:gap-3">
           <span className="pointer-events-auto tabular-nums">{Math.round(hudTick.bpm)} BPM</span>
+          <PerformanceControls phase={perfSessionPhase} onPlay={handlePerfPlay} onEnd={handlePerfEnd} />
           <button
             type="button"
             onClick={() => setPerformanceMode(false)}
@@ -238,6 +292,13 @@ export default function Home() {
           </button>
         </div>
       ) : null}
+
+      <PerformanceResultsPanel
+        open={performanceMode && perfSessionPhase === "ended" && perfSessionResult != null}
+        playbackId={perfResultPlaybackId}
+        result={perfSessionResult}
+        onClose={handlePerfResultsClose}
+      />
 
       {!performanceMode ? (
         <header className="text-center">
@@ -327,12 +388,24 @@ export default function Home() {
           <CameraStage
             engineRef={engineRef}
             performanceMode={performanceMode}
+            performanceSessionGeneration={perfSessionGeneration}
             onGroupSyncFinalized={onGroupSyncFinalized}
             onGroupStatsInterval={onGroupStatsInterval}
             rewardVisual={rewardVisual}
             confettiBurstKey={confettiBurstKey}
             choreographySequence={beatSequence}
             performanceBpm={performanceMode ? hudTick.bpm : undefined}
+            performanceMetrics={
+              performanceMode
+                ? {
+                    gameHud: perfGameHud,
+                    cycle: perfSummaryCycle,
+                    dismissCycle: dismissPerfSummaryCycle,
+                    ingestBlockResult: perfIngestBlock,
+                    ingestIntervalReport: perfIngestInterval,
+                  }
+                : null
+            }
           />
         </div>
       </div>

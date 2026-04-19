@@ -155,6 +155,24 @@ export function getBeatSlotForGlobalBeat(
   return getBeatSlotAtLoopIndex(loopBeat, sequence);
 }
 
+/**
+ * First global beat index ≥ `fromBeat` whose slot is an action (pattern repeats every `sequence.length`).
+ * Used by performance HUD to skip rest beats visually while keeping the same underlying beat clock.
+ */
+export function firstActionBeatOnOrAfter(
+  fromBeat: number,
+  sequence: readonly BeatSlot[]
+): number | null {
+  const len = sequence.length;
+  if (len === 0) return null;
+  for (let k = 0; k < len; k++) {
+    const b = fromBeat + k;
+    const slot = getBeatSlotForGlobalBeat(b, sequence);
+    if (slot.kind === "action") return b;
+  }
+  return null;
+}
+
 /** Continuous beat → discrete global beat index (floor). */
 export function beatFloatToBeatIndex(beatFloat: number): number {
   return Math.floor(beatFloat);

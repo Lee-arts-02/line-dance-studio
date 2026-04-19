@@ -13,9 +13,11 @@ import {
 import type { JudgmentResult, PlayerActionEvent } from "./types";
 
 /** Half-width of perfect window (ms) vs beat center. */
-export const PERFECT_WINDOW_MS = 100;
-/** Half-width of good window (ms). */
-export const GOOD_WINDOW_MS = 220;
+export const PERFECT_WINDOW_MS = 108;
+/** Half-width of good window (ms) — widened slightly for musical feel. */
+export const GOOD_WINDOW_MS = 248;
+/** Extra allowance (ms) for slightly late hits only (after beat center). */
+export const GOOD_WINDOW_LATE_EXTRA_MS = 52;
 
 const POINTS_PERFECT = 100;
 const POINTS_GOOD = 60;
@@ -95,6 +97,12 @@ export function judgePlayerAction(
   if (absMs <= PERFECT_WINDOW_MS) {
     kind = "perfect";
   } else if (absMs <= GOOD_WINDOW_MS) {
+    kind = "good";
+  } else if (
+    deltaMs > 0 &&
+    deltaMs <= GOOD_WINDOW_MS + GOOD_WINDOW_LATE_EXTRA_MS
+  ) {
+    /** Slight delay tolerance: still counts as good if a bit late, not too loose. */
     kind = "good";
   } else {
     kind = "miss";

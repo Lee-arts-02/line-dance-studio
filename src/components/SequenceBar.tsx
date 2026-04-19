@@ -5,6 +5,7 @@ import {
   REST_CHIP_CLASS,
   type BeatSlot,
   getBeatSlotForGlobalBeat,
+  firstActionBeatOnOrAfter,
   loopBeatIndexFromGlobalBeat,
 } from "@/lib/dance/sequence";
 
@@ -33,10 +34,6 @@ function classifyBeatState(
   return "current";
 }
 
-function restDisplayLabel(slot: Extract<BeatSlot, { kind: "rest" }>): string {
-  return slot.label === "prep" ? "PREP" : "REST";
-}
-
 /**
  * Scrolling lane: one column per beat (action or prep/rest).
  */
@@ -59,12 +56,8 @@ export function SequenceBar({
   const laneH = variant === "hud" ? "min-h-[148px] sm:min-h-[168px]" : "min-h-[132px] sm:min-h-[148px]";
   const labelClass =
     variant === "hud"
-      ? "text-sm font-extrabold uppercase tracking-widest text-white sm:text-base"
-      : "text-xs font-bold uppercase tracking-wider text-white/80 sm:text-sm";
-  const restLabelClass =
-    variant === "hud"
-      ? "text-xs font-bold uppercase tracking-[0.2em] text-white/50 sm:text-sm"
-      : "text-[10px] font-semibold uppercase tracking-wider text-white/45 sm:text-xs";
+      ? "text-sm font-extrabold uppercase tracking-widest text-transparent bg-clip-text bg-gradient-to-r from-cyan-200 via-sky-200 to-fuchsia-200 drop-shadow-[0_0_12px_rgba(34,211,238,0.45)] sm:text-base"
+      : "text-xs font-bold uppercase tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-cyan-200/95 to-fuchsia-200/90 sm:text-sm";
 
   const shell = overlay
     ? "rounded-2xl border border-white/15 bg-black/50 shadow-2xl shadow-black/40 backdrop-blur-md"
@@ -182,6 +175,13 @@ export function SequenceBar({
                   : "ring-1 ring-white/15"
                 : "ring-1 ring-white/10";
 
+            /** Rest beat: show the upcoming real action only (no PREP / READY). */
+            const nextActBeat = firstActionBeatOnOrAfter(k + 1, sequence);
+            const nextActSlot =
+              nextActBeat != null ? getBeatSlotForGlobalBeat(nextActBeat, sequence) : null;
+            const restPreviewLabel =
+              nextActSlot?.kind === "action" ? nextActSlot.displayLabel : "·";
+
             return (
               <div
                 key={k}
@@ -199,10 +199,7 @@ export function SequenceBar({
                   ].join(" ")}
                   style={{ minWidth: `${pixelsPerBeat - 10}px` }}
                 >
-                  <span className={restLabelClass}>{restDisplayLabel(slot)}</span>
-                  <span className="mt-0.5 text-[9px] font-medium uppercase tracking-wider text-white/25">
-                    {loopIdx + 1}/{loopLen}
-                  </span>
+                  <span className={[labelClass, "opacity-80"].join(" ")}>{restPreviewLabel}</span>
                 </div>
               </div>
             );
