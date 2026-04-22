@@ -138,6 +138,9 @@ export default function Home() {
     setPerfResultPlaybackId((n) => n + 1);
   }, [perfEndSession]);
 
+  const handlePerfEndRef = useRef(handlePerfEnd);
+  handlePerfEndRef.current = handlePerfEnd;
+
   const handlePerfResultsClose = useCallback(() => {
     stopResultSfx();
     perfDismissSessionResults();
@@ -146,6 +149,8 @@ export default function Home() {
 
   const performanceModeRef = useRef(performanceMode);
   performanceModeRef.current = performanceMode;
+  const perfSessionPhaseRef = useRef(perfSessionPhase);
+  perfSessionPhaseRef.current = perfSessionPhase;
 
   const loadBuiltIn = useCallback((id: string) => {
     const engine = engineRef.current;
@@ -174,7 +179,12 @@ export default function Home() {
     const el = engine.getAudioElement();
     const onPlay = () => setIsPlaying(true);
     const onPause = () => setIsPlaying(false);
-    const onEnded = () => setIsPlaying(false);
+    const onEnded = () => {
+      setIsPlaying(false);
+      if (performanceModeRef.current && perfSessionPhaseRef.current === "playing") {
+        handlePerfEndRef.current();
+      }
+    };
     el.addEventListener("play", onPlay);
     el.addEventListener("pause", onPause);
     el.addEventListener("ended", onEnded);
