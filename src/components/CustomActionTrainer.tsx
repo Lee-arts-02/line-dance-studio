@@ -2,6 +2,11 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { PoseDetector } from "@tensorflow-models/pose-detection";
+import {
+  ActionLabelOverlay,
+  resolveTrainerCameraOverlayLabel,
+  type TrainerCameraOverlayModel,
+} from "@/components/ActionLabelOverlay";
 import { useCustomModel } from "@/context/CustomModelContext";
 import { DANCE_ACTION_IDS } from "@/lib/dance/sequence";
 import { ActionRecognitionEngine, formatActionLabel } from "@/lib/pose/actions";
@@ -169,6 +174,15 @@ export function CustomActionTrainer() {
 
   const [builtinHint, setBuiltinHint] = useState<string | null>(null);
   const [customPred, setCustomPred] = useState<{ label: string; confidence: number } | null>(null);
+  /** Top-right camera HUD — updated only when text/variant changes (see RAF loop). */
+  const [cameraOverlay, setCameraOverlay] = useState<TrainerCameraOverlayModel>({
+    text: "NO ACTION",
+    variant: "neutral",
+  });
+  const recordLabelRef = useRef(recordLabel);
+  useEffect(() => {
+    recordLabelRef.current = recordLabel;
+  }, [recordLabel]);
 
   const [training, setTraining] = useState(false);
   const [trainLog, setTrainLog] = useState<string | null>(null);
@@ -535,6 +549,25 @@ export function CustomActionTrainer() {
                 setCustomPred(null);
               }
 
+              /** Same-frame HUD (not mirrored): built-in flash first, else custom softmax, else record target. */
+              const previewBuiltin =
+                primary != null
+                  ? actionEngine.getEphemeralForCanvas(frameTime, [primary.playerId])[0]?.action ??
+                    null
+                  : null;
+              const canInfer = !!(inferModelRef.current && inferMetaRef.current);
+              const nextOverlay = resolveTrainerCameraOverlayLabel({
+                canInfer,
+                liveCustomPred,
+                previewBuiltin,
+                recordLabel: recordLabelRef.current,
+              });
+              setCameraOverlay((prev) =>
+                prev.text === nextOverlay.text && prev.variant === nextOverlay.variant
+                  ? prev
+                  : nextOverlay
+              );
+
               ctx.clearRect(0, 0, c.width, c.height);
               ctx.save();
               ctx.scale(dpr, dpr);
@@ -667,6 +700,7 @@ export function CustomActionTrainer() {
               autoPlay
             />
             <canvas ref={canvasRef} className="pointer-events-none absolute inset-0 h-full w-full" aria-hidden />
+            {detectorStatus === "ready" ? <ActionLabelOverlay model={cameraOverlay} /> : null}
             {detectorStatus === "loading" ? (
               <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/55 text-sm text-white">
                 Loading pose model…

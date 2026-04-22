@@ -169,6 +169,8 @@ export function usePerformanceMetrics(performanceMode: boolean, sessionActive: b
 
   const [cycle, setCycle] = useState<PerformanceSummaryCycle | null>(null);
   const seqRef = useRef(0);
+  /** First 20s summary this session shows `NEXT ROUND!` once; then stats + mixed cues. */
+  const hasShownFirstRoundMessageRef = useRef(false);
 
   const [hud, setHud] = useState<PerformanceGameHud>({
     syncCount: 0,
@@ -247,6 +249,7 @@ export function usePerformanceMetrics(performanceMode: boolean, sessionActive: b
     sessionRef.current = true;
     clearMicroTimer();
     seqRef.current = 0;
+    hasShownFirstRoundMessageRef.current = false;
     setCycle(null);
     resetSessionHud();
     setSessionResult(null);
@@ -297,6 +300,12 @@ export function usePerformanceMetrics(performanceMode: boolean, sessionActive: b
     (report: GroupSyncIntervalReport) => {
       if (!perfRef.current || !sessionRef.current) return;
       seqRef.current += 1;
+      const intervalSeq = seqRef.current;
+      const isFirstIntervalOverlay = !hasShownFirstRoundMessageRef.current;
+      if (isFirstIntervalOverlay) {
+        hasShownFirstRoundMessageRef.current = true;
+      }
+
       const h = hudRef.current;
       const dSync = h.syncCount - syncBaselineRef.current;
       const dCorrect = h.correctCount - correctBaselineRef.current;
@@ -304,12 +313,16 @@ export function usePerformanceMetrics(performanceMode: boolean, sessionActive: b
       correctBaselineRef.current = h.correctCount;
 
       setCycle({
-        key: seqRef.current,
-        stats: buildPerformanceSummaryStats(report, {
-          peakSyncCombo: dSync,
-          peakCorrectCombo: dCorrect,
-          teamFlowEnd: h.teamFlow,
-        }),
+        key: intervalSeq,
+        stats: buildPerformanceSummaryStats(
+          report,
+          {
+            peakSyncCombo: dSync,
+            peakCorrectCombo: dCorrect,
+            teamFlowEnd: h.teamFlow,
+          },
+          { intervalSeq, isFirstIntervalOverlay }
+        ),
       });
     },
     []
@@ -323,6 +336,7 @@ export function usePerformanceMetrics(performanceMode: boolean, sessionActive: b
     if (!performanceMode) {
       dismissCycle();
       clearMicroTimer();
+      hasShownFirstRoundMessageRef.current = false;
       setSessionResult(null);
       sessionStartMsRef.current = null;
       setHud({

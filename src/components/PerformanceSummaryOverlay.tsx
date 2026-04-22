@@ -32,6 +32,7 @@ function flowLabel(level: PerformanceSummaryStats["flowLevel"]): string {
  */
 export function PerformanceSummaryOverlay({ stats, onDismiss }: PerformanceSummaryOverlayProps) {
   const [phase, setPhase] = useState<Phase>("enter");
+  const isFirstRoundTransition = stats.isFirstRoundTransition === true;
 
   useEffect(() => {
     let innerRaf = 0;
@@ -52,8 +53,15 @@ export function PerformanceSummaryOverlay({ stats, onDismiss }: PerformanceSumma
 
   const opacity = phase === "visible" ? "opacity-100" : "opacity-0";
   const duration = phase === "exit" ? "duration-[480ms]" : "duration-300";
+  /** First “NEXT ROUND!” cycle: card eases in slightly tighter, headline handles the punchy pop. */
   const scale =
-    phase === "visible" ? "scale-100" : phase === "enter" ? "scale-[0.88]" : "scale-[0.94]";
+    phase === "visible"
+      ? "scale-100"
+      : phase === "enter"
+        ? isFirstRoundTransition
+          ? "scale-[0.92]"
+          : "scale-[0.88]"
+        : "scale-[0.94]";
 
   const glowActive = phase === "visible";
 
@@ -66,7 +74,13 @@ export function PerformanceSummaryOverlay({ stats, onDismiss }: PerformanceSumma
       <div
         className={`w-full max-w-2xl transition-all ease-out ${opacity} ${duration} ${scale}`}
       >
-        <div className="relative overflow-hidden rounded-3xl border-2 border-fuchsia-400/45 bg-gradient-to-b from-black/75 via-black/65 to-black/80 px-5 py-7 shadow-[0_0_48px_rgba(217,70,239,0.22),0_0_96px_rgba(34,211,238,0.08)] backdrop-blur-xl sm:px-10 sm:py-9">
+        <div
+          className={`relative overflow-hidden rounded-3xl border-2 bg-gradient-to-b from-black/75 via-black/65 to-black/80 px-5 py-7 backdrop-blur-xl sm:px-10 sm:py-9 ${
+            isFirstRoundTransition
+              ? "border-amber-300/55 shadow-[0_0_56px_rgba(250,204,21,0.35),0_0_80px_rgba(217,70,239,0.28),0_0_120px_rgba(34,211,238,0.12)]"
+              : "border-fuchsia-400/45 shadow-[0_0_48px_rgba(217,70,239,0.22),0_0_96px_rgba(34,211,238,0.08)]"
+          }`}
+        >
           <div
             className="pointer-events-none absolute inset-0 opacity-40"
             style={{
@@ -76,12 +90,21 @@ export function PerformanceSummaryOverlay({ stats, onDismiss }: PerformanceSumma
           />
 
           <p
-            className={`relative text-center text-4xl font-black uppercase leading-[1.05] tracking-tight text-white sm:text-5xl md:text-6xl ${
-              glowActive ? "[animation:perf-summary-hero-glow_2.2s_ease-in-out_infinite]" : ""
+            className={`relative text-center font-black uppercase leading-[1.05] tracking-tight text-white ${
+              isFirstRoundTransition
+                ? "text-5xl sm:text-6xl md:text-7xl"
+                : "text-4xl sm:text-5xl md:text-6xl"
+            } ${
+              isFirstRoundTransition && phase === "visible"
+                ? "motion-safe:animate-[perf-summary-first-round-pop_0.72s_ease-out_forwards]"
+                : glowActive
+                  ? "[animation:perf-summary-hero-glow_2.2s_ease-in-out_infinite]"
+                  : ""
             }`}
             style={{
-              textShadow:
-                "0 2px 4px rgba(0,0,0,1), 0 0 40px rgba(251,191,36,0.45), 0 0 80px rgba(34,211,238,0.2)",
+              textShadow: isFirstRoundTransition
+                ? "0 2px 6px rgba(0,0,0,1), 0 0 48px rgba(251,191,36,0.65), 0 0 100px rgba(34,211,238,0.35), 0 0 120px rgba(217,70,239,0.25)"
+                : "0 2px 4px rgba(0,0,0,1), 0 0 40px rgba(251,191,36,0.45), 0 0 80px rgba(34,211,238,0.2)",
             }}
           >
             {stats.headline}

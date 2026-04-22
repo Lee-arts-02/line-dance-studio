@@ -6,10 +6,31 @@ import type { GroupSyncIntervalReport } from "./types";
 
 export type PerformanceSummaryStats = {
   headline: string;
+  /** True only for the first 20s summary this session — larger headline + transition animation in UI. */
+  isFirstRoundTransition?: boolean;
   peakSyncCombo: number;
   peakCorrectCombo: number;
   teamFlowEnd: number;
   flowLevel: TeamFlowLevel;
+};
+
+/** Short stage cues mixed into later 20s summaries (no long sentences). */
+const SWITCH_STYLE_HEADLINES: readonly string[] = [
+  "SWITCH",
+  "KEEP THE FLOW!",
+  "GOOD JOB!",
+  "STAY IN SYNC!",
+  "GREAT TEAM!",
+];
+
+export type BuildPerformanceSummaryOptions = {
+  /**
+   * Monotonic counter for interval overlays this session (first summary = 1).
+   * Used for rotating “switch” style lines after the first cycle.
+   */
+  intervalSeq: number;
+  /** When true, headline is always the first-round transition line (caller sets once per session). */
+  isFirstIntervalOverlay: boolean;
 };
 
 export type TeamFlowLevel = "LOW" | "MID" | "HIGH" | "MAX";
@@ -44,21 +65,28 @@ export type IntervalSessionSnapshot = {
 
 export function buildPerformanceSummaryStats(
   report: GroupSyncIntervalReport,
-  session: IntervalSessionSnapshot
+  session: IntervalSessionSnapshot,
+  opts: BuildPerformanceSummaryOptions
 ): PerformanceSummaryStats {
   const acc = groupJudgmentAccuracyRate(report);
   const sync = groupSyncRateFromReport(report);
   const flowLevel = teamFlowToLevel(session.teamFlowEnd);
-  const headline = pickSummaryHeadline(
-    flowLevel,
-    session.peakSyncCombo,
-    session.peakCorrectCombo,
-    sync,
-    acc
-  );
+
+  const isFirst = opts.isFirstIntervalOverlay;
+  const headline = isFirst
+    ? "NEXT ROUND!"
+    : pickPostFirstPerformanceHeadline(
+        opts.intervalSeq,
+        flowLevel,
+        session.peakSyncCombo,
+        session.peakCorrectCombo,
+        sync,
+        acc
+      );
 
   return {
     headline,
+    isFirstRoundTransition: isFirst,
     peakSyncCombo: session.peakSyncCombo,
     peakCorrectCombo: session.peakCorrectCombo,
     teamFlowEnd: session.teamFlowEnd,
@@ -81,4 +109,25 @@ function pickSummaryHeadline(
   if (overallAcc >= 0.65 && overallSync >= 0.55) return "KEEP IT TIGHT!";
   if (peakSync >= 6 || peakCorrect >= 6) return "ON BEAT!";
   return "FEEL THE GROOVE!";
+}
+
+/**
+ * Headlines for 2nd+ 20s overlay: mostly stats-driven stage lines, with periodic short “switch” cues.
+ * `intervalSeq` is the same counter passed to `buildPerformanceSummaryStats` (>= 2 here).
+ */
+function pickPostFirstPerformanceHeadline(
+  intervalSeq: number,
+  flowLevel: TeamFlowLevel,
+  peakSync: number,
+  peakCorrect: number,
+  overallSync: number,
+  overallAcc: number
+): string {
+  const base = pickSummaryHeadline(flowLevel, peakSync, peakCorrect, overallSync, overallAcc);
+  /** First slot at seq 3, then every 5th (8, 13, …) — keeps rhythm without drowning out feedback. */
+  if (intervalSeq >= 3 && (intervalSeq - 3) % 5 === 0) {
+    const i = Math.floor((intervalSeq - 3) / 5) % SWITCH_STYLE_HEADLINES.length;
+    return SWITCH_STYLE_HEADLINES[i]!;
+  }
+  return base;
 }

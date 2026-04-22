@@ -138,3 +138,35 @@ body {
 .perf-results-panel-in {
   animation: perf-results-panel-in 0.48s cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
+
+/** Performance mode — first 20s summary only: headline “pops” into the next round. */
+@keyframes perf-summary-first-round-pop {
+  0% {
+    transform: scale(0.9);
+    filter: drop-shadow(0 0 18px rgba(250, 204, 21, 0.45));
+  }
+  55% {
+    transform: scale(1.1);
+    filter: drop-shadow(0 0 42px rgba(250, 204, 21, 0.85)) drop-shadow(0 0 56px rgba(34, 211, 238, 0.45));
+  }
+  100% {
+    transform: scale(1);
+    filter: drop-shadow(0 0 32px rgba(217, 70, 239, 0.55)) drop-shadow(0 0 20px rgba(250, 204, 21, 0.35));
+  }
+}
+
+/** Custom Action Training — top-right HUD: quick pop when the label changes. */
+@keyframes actionLabelPop {
+  0% {
+    opacity: 0.72;
+    transform: scale(0.97);
+  }
+  55% {
+    opacity: 1;
+    transform: scale(1.03);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
