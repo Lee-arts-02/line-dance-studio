@@ -28,7 +28,7 @@ function flowLabel(level: PerformanceSummaryStats["flowLevel"]): string {
 }
 
 /**
- * 20s interval — centered “stage” card: large headline + metrics. High z-index above camera / flow bar.
+ * Rolling beat interval — centered “stage” card: large headline + metrics. High z-index above camera / flow bar.
  */
 export function PerformanceSummaryOverlay({ stats, onDismiss }: PerformanceSummaryOverlayProps) {
   const [phase, setPhase] = useState<Phase>("enter");
@@ -111,7 +111,7 @@ export function PerformanceSummaryOverlay({ stats, onDismiss }: PerformanceSumma
           </p>
 
           <div className="relative mt-5 text-center text-[10px] font-bold uppercase tracking-[0.35em] text-white/50 sm:text-[11px]">
-            20s set
+            16 beats
           </div>
 
           <div className="relative mt-5 flex flex-wrap items-end justify-center gap-x-10 gap-y-4 border-t border-white/15 pt-5 font-mono text-white/95">

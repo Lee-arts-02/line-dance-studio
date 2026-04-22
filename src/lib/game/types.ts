@@ -86,7 +86,10 @@ export type IndividualAccuracyReport = {
 export type GroupSyncIntervalReport = {
   intervalStartSec: number;
   intervalEndSec: number;
+  /** Wall-clock span of this window (first → last finalized pair in the chunk). */
   intervalMs: number;
+  /** Musical beats covered by this summary (one pair finalize = 2 beats). */
+  intervalBeats: number;
   evaluatedBlockCount: number;
   individualAccuracies: IndividualAccuracyReport[];
   overallGroupSync: number;

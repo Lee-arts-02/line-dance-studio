@@ -169,7 +169,7 @@ export function usePerformanceMetrics(performanceMode: boolean, sessionActive: b
 
   const [cycle, setCycle] = useState<PerformanceSummaryCycle | null>(null);
   const seqRef = useRef(0);
-  /** First 20s summary this session shows `NEXT ROUND!` once; then stats + mixed cues. */
+  /** First interval summary this session shows `NEXT ROUND!` once; then stats + mixed cues. */
   const hasShownFirstRoundMessageRef = useRef(false);
 
   const [hud, setHud] = useState<PerformanceGameHud>({

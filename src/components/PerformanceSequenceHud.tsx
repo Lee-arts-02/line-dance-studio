@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  BEATS_PER_PAIR,
   getActionChipStyle,
   type BeatSlot,
   getBeatSlotForGlobalBeat,
@@ -30,7 +31,15 @@ export function PerformanceSequenceHud({ currentBeatFloat, sequence }: Performan
   const bf = currentBeatFloat;
   const curBeat = beatFloatToBeatIndex(bf);
 
-  const b0 = firstActionBeatOnOrAfter(curBeat, sequence);
+  /**
+   * Anchor “current” on the action beat of the active pair (prep beats share the same cue as the
+   * preceding move). So after PLAY at beat 0, Current stays the first choreography action through
+   * the prep beat instead of jumping to the next move.
+   */
+  const b0 =
+    sequence.length === 0
+      ? null
+      : Math.floor(curBeat / BEATS_PER_PAIR) * BEATS_PER_PAIR;
   const b1 = b0 != null ? firstActionBeatOnOrAfter(b0 + 1, sequence) : null;
 
   const currentSlot: BeatSlot | null =

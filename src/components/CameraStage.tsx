@@ -1,15 +1,17 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
 import type { PoseDetector } from "@tensorflow-models/pose-detection";
 import { useCustomModel } from "@/context/CustomModelContext";
 import type { AudioEngine } from "@/lib/audio/audioEngine";
 import {
   beatFloatToPairIndex,
   getBeatSlotForGlobalBeat,
+  mapDetectedDefaultActionForGameplay,
   type BeatSlot,
+  type DanceActionId,
 } from "@/lib/dance/sequence";
-import { GroupSyncTracker } from "@/lib/game/groupSync";
+import { GroupSyncTracker, STATS_INTERVAL_BEATS } from "@/lib/game/groupSync";
 import { judgePlayerAction } from "@/lib/game/judgment";
 import { PlayerScoreboard, isJudgmentVisible } from "@/lib/game/scoring";
 import {
@@ -103,6 +105,18 @@ type GroupSyncPanelState = {
   currentBlockIndex: number;
   currentExpectedLabel: string;
 };
+
+function mapEphemeralForGameplayDisplay(
+  rows: EphemeralActionDisplay[]
+): EphemeralActionDisplay[] {
+  return rows.map((e) => ({
+    playerId: e.playerId,
+    action:
+      e.action == null
+        ? null
+        : (mapDetectedDefaultActionForGameplay(e.action) as DanceActionId),
+  }));
+}
 
 function judgmentFillForTier(tier: JudgmentCanvasOverlay["tier"]): string {
   switch (tier) {
@@ -237,7 +251,7 @@ export type CameraStageProps = {
   performanceMode?: boolean;
   /** Fires once per finalized group-sync beat (same as Step 6 tracker). */
   onGroupSyncFinalized?: (result: GroupSyncBeatResult) => void;
-  /** Fires when the rolling stats interval closes (default 20s in tracker). */
+  /** Fires when the rolling stats interval closes (every 16 beats in tracker). */
   onGroupStatsInterval?: (report: GroupSyncIntervalReport) => void;
   rewardVisual?: RewardVisualState;
   confettiBurstKey?: number;
@@ -249,6 +263,11 @@ export type CameraStageProps = {
   performanceMetrics?: CameraStagePerformanceMetrics | null;
   /** Increments on each PLAY — resets in-stage scoring / group-sync for a new performance round. */
   performanceSessionGeneration?: number;
+  /**
+   * Performance only: beats per cue / stats roll-up, aligned to phrase boundaries (e.g. `2 *` one
+   * full `choreographySequence.length` for two right–right–left–clap rounds).
+   */
+  performanceCueEveryBeats?: number;
 };
 
 /**
@@ -265,6 +284,7 @@ export function CameraStage({
   performanceBpm,
   performanceMetrics = null,
   performanceSessionGeneration = 0,
+  performanceCueEveryBeats,
 }: CameraStageProps) {
   const onGroupSyncRef = useRef(onGroupSyncFinalized);
   onGroupSyncRef.current = onGroupSyncFinalized;
@@ -272,6 +292,10 @@ export function CameraStage({
   onGroupStatsIntervalRef.current = onGroupStatsInterval;
   const choreographyRef = useRef(choreographySequence);
   choreographyRef.current = choreographySequence;
+  const performanceModeRef = useRef(performanceMode);
+  performanceModeRef.current = performanceMode;
+  const performanceCueEveryBeatsRef = useRef(performanceCueEveryBeats ?? 0);
+  performanceCueEveryBeatsRef.current = performanceCueEveryBeats ?? 0;
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const detectorRef = useRef<PoseDetector | null>(null);
@@ -328,7 +352,7 @@ export function CameraStage({
   const customEmitterRef = useRef(new CustomGestureEmitter());
   const lastAppliedPerfGenRef = useRef<number | null>(null);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!performanceMode) {
       lastAppliedPerfGenRef.current = null;
       return;
@@ -357,6 +381,16 @@ export function CameraStage({
     ingestPerfSummaryRef.current = performanceMetrics?.ingestIntervalReport ?? (() => {});
     ingestBlockRef.current = performanceMetrics?.ingestBlockResult ?? (() => {});
   }, [performanceMetrics?.ingestIntervalReport, performanceMetrics?.ingestBlockResult]);
+
+  useEffect(() => {
+    const beats =
+      performanceMode &&
+      performanceCueEveryBeats != null &&
+      performanceCueEveryBeats > 0
+        ? performanceCueEveryBeats
+        : STATS_INTERVAL_BEATS;
+    groupSyncRef.current.setStatsIntervalBeats(beats);
+  }, [performanceMode, performanceCueEveryBeats]);
   const pushDebug = useCallback((partial: Partial<PoseDebugSnapshot>) => {
     const now = performance.now();
     if (now - lastDebugPush.current < 220) return;
@@ -440,7 +474,7 @@ export function CameraStage({
                 for (const ev of actionEvents) {
                   const payload: PlayerActionEvent = {
                     playerId: ev.playerId,
-                    action: ev.action,
+                    action: mapDetectedDefaultActionForGameplay(ev.action),
                     detectionSource: "default_rules",
                     tPerf: ev.t,
                     audioTimeSec,
@@ -584,11 +618,20 @@ export function CameraStage({
               if (engine) {
                 const audioTimeSec = engine.getCurrentTime();
                 const bf = engine.getCurrentBeatFloat();
+                const alignLoopBeats =
+                  performanceModeRef.current &&
+                  performanceCueEveryBeatsRef.current > 0
+                    ? performanceCueEveryBeatsRef.current
+                    : 0;
                 const tickOut = groupSyncRef.current.tick(
                   bf,
                   audioTimeSec,
                   tracked.map((p) => p.playerId),
-                  choreographyRef.current
+                  choreographyRef.current,
+                  {
+                    intervalFlushAlignLoopBeats: alignLoopBeats,
+                    pairFinalizeEarlyBeats: performanceModeRef.current ? 1 : 0,
+                  }
                 );
                 if (tickOut.latestBlockResult) {
                   setGroupSyncPanel((p) => ({ ...p, lastResult: tickOut.latestBlockResult }));
@@ -616,9 +659,11 @@ export function CameraStage({
                   }));
                 }
               }
-              const actionEphemeral = actionEngineRef.current.getEphemeralForCanvas(
-                frameTime,
-                tracked.map((p) => p.playerId)
+              const actionEphemeral = mapEphemeralForGameplayDisplay(
+                actionEngineRef.current.getEphemeralForCanvas(
+                  frameTime,
+                  tracked.map((p) => p.playerId)
+                )
               );
               const actionSnapshots = actionEngineRef.current.getSnapshotsForPlayers(
                 tracked.map((p) => p.playerId)
@@ -627,9 +672,13 @@ export function CameraStage({
               const actionRowsFromSnapshots = (): ActionDebugRow[] =>
                 actionSnapshots.map((s) => {
                   const st = scoreboardRef.current.get(s.playerId);
+                  const displayAction =
+                    s.lastAction == null
+                      ? null
+                      : (mapDetectedDefaultActionForGameplay(s.lastAction) as DanceActionId);
                   return {
                     playerId: s.playerId,
-                    lastAction: s.lastAction ? formatActionLabel(s.lastAction) : null,
+                    lastAction: displayAction ? formatActionLabel(displayAction) : null,
                     lastTimeMs: s.lastActionTime,
                     judgment: st.latestJudgment ? formatJudgmentLabel(st.latestJudgment) : null,
                     score: st.totalScore,
@@ -911,7 +960,7 @@ export function CameraStage({
             {groupSyncPanel.lastIntervalReport ? (
               <div className="mt-2 rounded-lg border border-[var(--border)]/70 bg-black/20 px-2.5 py-2">
                 <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-[var(--muted)]">
-                  Interval report ({Math.round(groupSyncPanel.lastIntervalReport.intervalMs / 1000)}s)
+                  Interval report ({groupSyncPanel.lastIntervalReport.intervalBeats} beats)
                 </div>
                 <div className="grid grid-cols-2 gap-x-3 gap-y-1 font-mono text-[10px] sm:grid-cols-3">
                   <div>

@@ -28,6 +28,18 @@ export function normalizeSequenceAction(id: string): string {
   return id.trim().toLowerCase();
 }
 
+/**
+ * Maps raw default-rule detection to the gameplay tag (score + on-screen label).
+ * Video mirror is unchanged: physically stepping “camera left” still fires the same detector output,
+ * but scoring/UI treat it as the opposite lateral move.
+ */
+export function mapDetectedDefaultActionForGameplay(action: string): string {
+  const n = normalizeSequenceAction(String(action));
+  if (n === "step_left") return "step_right";
+  if (n === "step_right") return "step_left";
+  return n;
+}
+
 /** One beat in the loop: perform a move, or rest / prep. */
 export type BeatSlot =
   | { kind: "action"; action: SequenceActionId; displayLabel: string }
@@ -111,10 +123,11 @@ export function expandActionsToBeatSlots(actions: readonly SequenceActionId[]): 
   return out;
 }
 
-/** Built-in choreography: one cycle of the three default moves (each followed by a prep beat). */
+/** Built-in choreography: default cycle (each move followed by a prep beat). */
 export const DEFAULT_SYSTEM_ACTIONS: readonly DanceActionId[] = [
-  "step_left",
   "step_right",
+  "step_right",
+  "step_left",
   "clap",
 ];
 

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import { AudioEngine } from "@/lib/audio/audioEngine";
 import { useAudioEngineTick } from "@/lib/audio/useAudioEngineTick";
 import { BUILT_IN_TRACKS } from "@/lib/audio/tracks";
@@ -118,14 +119,18 @@ export default function Home() {
     preloadResultSfx();
     engine?.reset();
     perfBeginSession();
-    setPerfSessionGeneration((g) => g + 1);
-    setPerfSessionPhase("playing");
+    /** Commit perf round reset in CameraStage (group sync / scoreboard) before audio `play()`. */
+    flushSync(() => {
+      setPerfSessionGeneration((g) => g + 1);
+      setPerfSessionPhase("playing");
+    });
     if (engine) void engine.play().catch(() => {});
   }, [perfBeginSession]);
 
   const handlePerfEnd = useCallback(() => {
     const engine = engineRef.current;
     engine?.pause();
+    engine?.reset();
     perfEndSession();
     /** Same user gesture as END — reliable `HTMLAudioElement.play()` vs autoplay rules. */
     playResultSfxForResultsBuild({ maxAudibleMs: 3000 });
@@ -389,6 +394,11 @@ export default function Home() {
             engineRef={engineRef}
             performanceMode={performanceMode}
             performanceSessionGeneration={perfSessionGeneration}
+            performanceCueEveryBeats={
+              performanceMode && beatSequence.length > 0
+                ? 2 * beatSequence.length
+                : undefined
+            }
             onGroupSyncFinalized={onGroupSyncFinalized}
             onGroupStatsInterval={onGroupStatsInterval}
             rewardVisual={rewardVisual}
@@ -411,10 +421,10 @@ export default function Home() {
       </div>
       {!performanceMode && latestGroupStatsReport ? (
         <section className="rounded-xl border border-[var(--border)] bg-[var(--panel)]/50 px-4 py-3 text-xs text-[var(--muted)]">
-          <div className="font-semibold uppercase tracking-wide">Latest 20s group report</div>
+          <div className="font-semibold uppercase tracking-wide">Latest 16 beats group report</div>
           <div className="mt-1 font-mono">
             last window · blocks {latestGroupStatsReport.evaluatedBlockCount} ·{" "}
-            {Math.round(latestGroupStatsReport.intervalMs / 1000)}s
+            {latestGroupStatsReport.intervalBeats} beats (~{Math.round(latestGroupStatsReport.intervalMs / 1000)}s)
           </div>
         </section>
       ) : null}

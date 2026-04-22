@@ -1,12 +1,12 @@
 /**
- * Performance-mode interval summary (default 20s) — headline + combo / flow peaks.
+ * Performance-mode interval summary (rolling beat window) — headline + combo / flow peaks.
  */
 
 import type { GroupSyncIntervalReport } from "./types";
 
 export type PerformanceSummaryStats = {
   headline: string;
-  /** True only for the first 20s summary this session — larger headline + transition animation in UI. */
+  /** True only for the first interval summary this session — larger headline + transition animation in UI. */
   isFirstRoundTransition?: boolean;
   peakSyncCombo: number;
   peakCorrectCombo: number;
@@ -14,7 +14,7 @@ export type PerformanceSummaryStats = {
   flowLevel: TeamFlowLevel;
 };
 
-/** Short stage cues mixed into later 20s summaries (no long sentences). */
+/** Short stage cues mixed into later interval summaries (no long sentences). */
 const SWITCH_STYLE_HEADLINES: readonly string[] = [
   "SWITCH",
   "KEEP THE FLOW!",
@@ -112,7 +112,7 @@ function pickSummaryHeadline(
 }
 
 /**
- * Headlines for 2nd+ 20s overlay: mostly stats-driven stage lines, with periodic short “switch” cues.
+ * Headlines for 2nd+ interval overlay: mostly stats-driven stage lines, with periodic short “switch” cues.
  * `intervalSeq` is the same counter passed to `buildPerformanceSummaryStats` (>= 2 here).
  */
 function pickPostFirstPerformanceHeadline(
