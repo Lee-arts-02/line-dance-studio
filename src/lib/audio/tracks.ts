@@ -13,7 +13,7 @@ export const BUILT_IN_TRACKS: BuiltInTrack[] = [
     id: "sweet-home-alabama",
     title: "Sweet Home Alabama",
     url: `${base}/music/Sweet_Home_Alabama_BPM88_G.mp3`,
-    bpm: 88,
+    bpm: 97,
   },
   {
     id: "copperhead-road",
