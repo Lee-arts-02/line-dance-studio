@@ -18,6 +18,7 @@ import {
   DEFAULT_BEAT_SEQUENCE,
   DEFAULT_SYSTEM_ACTIONS,
   expandActionsToBeatSlots,
+  type LateralMappingMode,
   type SequenceActionId,
 } from "@/lib/dance/sequence";
 import { BeatSyncRegion } from "@/components/BeatSyncRegion";
@@ -67,6 +68,11 @@ export default function Home() {
   const [customActionSlots, setCustomActionSlots] = useState<SequenceActionId[]>(() => [
     ...DEFAULT_SYSTEM_ACTIONS,
   ]);
+  const [mirrorCamera, setMirrorCamera] = useState(true);
+  const [lateralMode, setLateralMode] = useState<LateralMappingMode>("front");
+  const [cueIntervalSecInput, setCueIntervalSecInput] = useState(() =>
+    String(Math.round((16 * 60) / BUILT_IN_TRACKS[0].bpm))
+  );
 
   const hudTick = useAudioEngineTick(engineRef);
 
@@ -87,6 +93,13 @@ export default function Home() {
     if (choreographyMode === "system") return DEFAULT_BEAT_SEQUENCE;
     return expandActionsToBeatSlots(customActionSlots);
   }, [choreographyMode, customActionSlots]);
+  const cueIntervalBeats = useMemo(() => {
+    const sec = Number(cueIntervalSecInput);
+    if (!Number.isFinite(sec) || sec <= 0) return 16;
+    const raw = Math.round((sec * bpm) / 60);
+    const even = Math.max(2, raw - (raw % 2));
+    return even;
+  }, [cueIntervalSecInput, bpm]);
 
   const choreoStorageKeyRef = useRef<string>("");
 
@@ -335,6 +348,33 @@ export default function Home() {
               Performance mode
             </button>
           </div>
+          <div className="mx-auto mt-3 flex max-w-3xl flex-wrap items-center justify-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--panel)]/40 px-3 py-2 text-xs text-[var(--muted)]">
+            <button
+              type="button"
+              onClick={() => setMirrorCamera((v) => !v)}
+              className="rounded-lg border border-white/20 bg-black/35 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-white/90 hover:bg-white/10"
+            >
+              Camera: {mirrorCamera ? "Mirror ON" : "Mirror OFF"}
+            </button>
+            <button
+              type="button"
+              onClick={() => setLateralMode((m) => (m === "front" ? "back" : "front"))}
+              className="rounded-lg border border-white/20 bg-black/35 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-white/90 hover:bg-white/10"
+            >
+              Direction: {lateralMode === "front" ? "Front" : "Back"}
+            </button>
+            <label className="flex items-center gap-2 text-[11px] uppercase tracking-wide text-white/85">
+              Cue every (seconds)
+              <input
+                type="number"
+                min={1}
+                step={1}
+                value={cueIntervalSecInput}
+                onChange={(e) => setCueIntervalSecInput(e.target.value)}
+                className="w-20 rounded-md border border-white/20 bg-black/45 px-2 py-1 text-center font-mono text-white outline-none ring-cyan-400/60 focus:ring-2"
+              />
+            </label>
+          </div>
         </header>
       ) : null}
 
@@ -404,9 +444,11 @@ export default function Home() {
             engineRef={engineRef}
             performanceMode={performanceMode}
             performanceSessionGeneration={perfSessionGeneration}
+            mirrorCamera={mirrorCamera}
+            lateralMode={lateralMode}
             performanceCueEveryBeats={
               performanceMode && beatSequence.length > 0
-                ? 2 * beatSequence.length
+                ? cueIntervalBeats
                 : undefined
             }
             onGroupSyncFinalized={onGroupSyncFinalized}
@@ -431,7 +473,7 @@ export default function Home() {
       </div>
       {!performanceMode && latestGroupStatsReport ? (
         <section className="rounded-xl border border-[var(--border)] bg-[var(--panel)]/50 px-4 py-3 text-xs text-[var(--muted)]">
-          <div className="font-semibold uppercase tracking-wide">Latest 16 beats group report</div>
+          <div className="font-semibold uppercase tracking-wide">Latest group report</div>
           <div className="mt-1 font-mono">
             last window · blocks {latestGroupStatsReport.evaluatedBlockCount} ·{" "}
             {latestGroupStatsReport.intervalBeats} beats (~{Math.round(latestGroupStatsReport.intervalMs / 1000)}s)

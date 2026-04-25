@@ -33,10 +33,17 @@ export function normalizeSequenceAction(id: string): string {
  * Video mirror is unchanged: physically stepping “camera left” still fires the same detector output,
  * but scoring/UI treat it as the opposite lateral move.
  */
-export function mapDetectedDefaultActionForGameplay(action: string): string {
+export type LateralMappingMode = "front" | "back";
+
+export function mapDetectedDefaultActionForGameplay(
+  action: string,
+  mode: LateralMappingMode = "front"
+): string {
   const n = normalizeSequenceAction(String(action));
-  if (n === "step_left") return "step_right";
-  if (n === "step_right") return "step_left";
+  if (mode === "back") {
+    if (n === "step_left") return "step_right";
+    if (n === "step_right") return "step_left";
+  }
   return n;
 }
 

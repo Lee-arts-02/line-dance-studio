@@ -7,6 +7,7 @@ import type { AudioEngine } from "@/lib/audio/audioEngine";
 import {
   beatFloatToPairIndex,
   getBeatSlotForGlobalBeat,
+  type LateralMappingMode,
   mapDetectedDefaultActionForGameplay,
   type BeatSlot,
   type DanceActionId,
@@ -40,7 +41,7 @@ import {
   TORSO_ACTION_LABEL_LINE_GAP_PX,
   type CustomBodyPrediction,
 } from "@/lib/pose/bodyActionLabels";
-import { mapVideoToMirroredOverlay } from "@/lib/pose/mirroredVideoMap";
+import { mapVideoToDisplay, mapVideoToMirroredOverlay } from "@/lib/pose/mirroredVideoMap";
 import {
   ActionRecognitionEngine,
   formatActionLabel,
@@ -107,14 +108,15 @@ type GroupSyncPanelState = {
 };
 
 function mapEphemeralForGameplayDisplay(
-  rows: EphemeralActionDisplay[]
+  rows: EphemeralActionDisplay[],
+  lateralMode: LateralMappingMode
 ): EphemeralActionDisplay[] {
   return rows.map((e) => ({
     playerId: e.playerId,
     action:
       e.action == null
         ? null
-        : (mapDetectedDefaultActionForGameplay(e.action) as DanceActionId),
+        : (mapDetectedDefaultActionForGameplay(e.action, lateralMode) as DanceActionId),
   }));
 }
 
@@ -139,6 +141,7 @@ function drawTrackedPoses(
   vh: number,
   cw: number,
   ch: number,
+  mirrorCamera: boolean,
   conf: number,
   loose: number
 ) {
@@ -151,8 +154,9 @@ function drawTrackedPoses(
       const b = person.keypoints[j];
       if (!a || !b) continue;
       if (!shouldDrawEdge(a.score, b.score, i, j, conf, loose)) continue;
-      const p1 = mapVideoToMirroredOverlay(a.x, a.y, vw, vh, cw, ch);
-      const p2 = mapVideoToMirroredOverlay(b.x, b.y, vw, vh, cw, ch);
+      const mapper = mirrorCamera ? mapVideoToMirroredOverlay : mapVideoToDisplay;
+      const p1 = mapper(a.x, a.y, vw, vh, cw, ch);
+      const p2 = mapper(b.x, b.y, vw, vh, cw, ch);
       ctx.strokeStyle = stroke;
       ctx.lineWidth = 3;
       ctx.globalAlpha = 0.92;
@@ -166,7 +170,8 @@ function drawTrackedPoses(
     person.keypoints.forEach((kp) => {
       const s = kp.score ?? 0;
       if (s < conf) return;
-      const p = mapVideoToMirroredOverlay(kp.x, kp.y, vw, vh, cw, ch);
+      const mapper = mirrorCamera ? mapVideoToMirroredOverlay : mapVideoToDisplay;
+      const p = mapper(kp.x, kp.y, vw, vh, cw, ch);
       ctx.fillStyle = fill;
       ctx.strokeStyle = "rgba(0,0,0,0.35)";
       ctx.lineWidth = 2;
@@ -176,7 +181,8 @@ function drawTrackedPoses(
       ctx.stroke();
     });
 
-    const t = mapVideoToMirroredOverlay(person.torso.x, person.torso.y, vw, vh, cw, ch);
+    const mapper = mirrorCamera ? mapVideoToMirroredOverlay : mapVideoToDisplay;
+    const t = mapper(person.torso.x, person.torso.y, vw, vh, cw, ch);
     const snap = ephemeral.find((s) => s.playerId === person.playerId);
     const torsoLines = buildMainStageTorsoLines(snap, customBody, person.playerId);
     /** Extra action lines stack upward — nudge player / judgment labels to avoid overlap. */
@@ -268,6 +274,8 @@ export type CameraStageProps = {
    * full `choreographySequence.length` for two right–right–left–clap rounds).
    */
   performanceCueEveryBeats?: number;
+  mirrorCamera?: boolean;
+  lateralMode?: LateralMappingMode;
 };
 
 /**
@@ -285,6 +293,8 @@ export function CameraStage({
   performanceMetrics = null,
   performanceSessionGeneration = 0,
   performanceCueEveryBeats,
+  mirrorCamera = true,
+  lateralMode = "front",
 }: CameraStageProps) {
   const onGroupSyncRef = useRef(onGroupSyncFinalized);
   onGroupSyncRef.current = onGroupSyncFinalized;
@@ -296,6 +306,10 @@ export function CameraStage({
   performanceModeRef.current = performanceMode;
   const performanceCueEveryBeatsRef = useRef(performanceCueEveryBeats ?? 0);
   performanceCueEveryBeatsRef.current = performanceCueEveryBeats ?? 0;
+  const mirrorCameraRef = useRef(mirrorCamera);
+  mirrorCameraRef.current = mirrorCamera;
+  const lateralModeRef = useRef<LateralMappingMode>(lateralMode);
+  lateralModeRef.current = lateralMode;
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const detectorRef = useRef<PoseDetector | null>(null);
@@ -474,7 +488,7 @@ export function CameraStage({
                 for (const ev of actionEvents) {
                   const payload: PlayerActionEvent = {
                     playerId: ev.playerId,
-                    action: mapDetectedDefaultActionForGameplay(ev.action),
+                    action: mapDetectedDefaultActionForGameplay(ev.action, lateralModeRef.current),
                     detectionSource: "default_rules",
                     tPerf: ev.t,
                     audioTimeSec,
@@ -663,7 +677,8 @@ export function CameraStage({
                 actionEngineRef.current.getEphemeralForCanvas(
                   frameTime,
                   tracked.map((p) => p.playerId)
-                )
+                ),
+                lateralModeRef.current
               );
               const actionSnapshots = actionEngineRef.current.getSnapshotsForPlayers(
                 tracked.map((p) => p.playerId)
@@ -675,7 +690,10 @@ export function CameraStage({
                   const displayAction =
                     s.lastAction == null
                       ? null
-                      : (mapDetectedDefaultActionForGameplay(s.lastAction) as DanceActionId);
+                      : (mapDetectedDefaultActionForGameplay(
+                          s.lastAction,
+                          lateralModeRef.current
+                        ) as DanceActionId);
                   return {
                     playerId: s.playerId,
                     lastAction: displayAction ? formatActionLabel(displayAction) : null,
@@ -716,6 +734,7 @@ export function CameraStage({
                 vh,
                 cw,
                 ch,
+                mirrorCameraRef.current,
                 KEYPOINT_CONFIDENCE_THRESHOLD,
                 0.15
               );
@@ -799,8 +818,10 @@ export function CameraStage({
           ref={videoRef}
           className={
             performanceMode
-              ? "block h-full min-h-[240px] w-full flex-1 scale-x-[-1] transform object-cover"
-              : "block h-auto w-full scale-x-[-1] transform object-cover"
+              ? `block h-full min-h-[240px] w-full flex-1 transform object-cover ${
+                  mirrorCamera ? "scale-x-[-1]" : ""
+                }`
+              : `block h-auto w-full transform object-cover ${mirrorCamera ? "scale-x-[-1]" : ""}`
           }
           playsInline
           muted
